@@ -21,10 +21,6 @@ func main() {
 	}
 }
 
-type Fetcher interface {
-	Fetch(url string) (body string, urls []string, err error)
-}
-
 type FetchResult struct {
 	timestamp time.Time
 	name      string
@@ -65,13 +61,13 @@ func (s *safeStringSet) fetch(name string, urlChanel <-chan string, urlsChanel c
 				s.set(url)
 
 				currentTime := time.Now()
-				body, urls, error := fetcher.Fetch(url)
+				body, urls, err := fetcher.Fetch(url)
 				fetchResult <- FetchResult{
 					timestamp: currentTime,
 					name:      name,
 					url:       url,
 					body:      body,
-					error:     error,
+					error:     err,
 				}
 
 				validUrls := make([]string, 0, len(urls))
@@ -109,13 +105,13 @@ func Crawl(url string, concurrent int, stop chan bool) <-chan FetchResult {
 
 		for index := 0; index < concurrent; index++ {
 			stops[index] = visitedUrl.fetch(fmt.Sprintf("Worker:%d", index+1), urlChanel, urlsChanel, result)
-			defer func(i int) { close(stops[i]) }(index)
 		}
 
 		urlChanel <- url
 		urlQueue := list.New()
 		counter := 1
 
+	for_:
 		for {
 			select {
 			case urls := <-urlsChanel:
@@ -126,7 +122,7 @@ func Crawl(url string, concurrent int, stop chan bool) <-chan FetchResult {
 				}
 
 				if counter == 0 && urlQueue.Len() == 0 {
-					return
+					break for_
 				}
 
 				for ; counter < concurrent && urlQueue.Len() > 0; counter++ {
@@ -135,8 +131,12 @@ func Crawl(url string, concurrent int, stop chan bool) <-chan FetchResult {
 					urlChanel <- node.Value.(string)
 				}
 			case <-stop:
-				return
+				break for_
 			}
+		}
+
+		for index := 0; index < concurrent; index++ {
+			close(stops[index])
 		}
 
 	}(url)
@@ -154,7 +154,7 @@ type fakeResult struct {
 
 func (f fakeFetcher) Fetch(url string) (string, []string, error) {
 	if res, ok := f[url]; ok {
-		time.Sleep(time.Duration(res.elapsed))
+		time.Sleep(res.elapsed)
 		return res.body, res.urls, nil
 	}
 	time.Sleep(time.Duration(500))

@@ -1,3 +1,4 @@
-/csharp/bin
-/csharp/obj
-/csharp/.vs
+/*/bin
+/*/obj
+/*/.vs
+/*/.idea
